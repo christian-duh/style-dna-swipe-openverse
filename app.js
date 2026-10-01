@@ -1,5 +1,5 @@
 const STORAGE_KEY='styleDNA.v1';
-const APP_VERSION='1.2-fashion-only';
+const APP_VERSION='1.3.0-frontpose';
 
 const CATEGORIES=[
   {id:'office',name:'Office',emoji:'◼',queries:[
@@ -68,15 +68,33 @@ let deck=[]; let idx=0; let activeCard=null; let drag={on:false,startX:0,current
 const $=s=>document.querySelector(s);
 const views={setup:$('#setupView'),swipe:$('#swipeView'),profile:$('#profileView')};
 
-function defaultState(){return{selectedCategories:CATEGORIES.map(c=>c.id),exploration:35,history:[],tagScores:{},queryScores:{},categoryCounts:{},lastCategory:null,setupComplete:false,createdAt:new Date().toISOString()}}
+function defaultState(){return{selectedCategories:CATEGORIES.map(c=>c.id),exploration:35,history:[],tagScores:{},queryScores:{},categoryCounts:{},lastCategory:null,setupComplete:false,createdAt:new Date().toISOString(),appVersion:APP_VERSION}}
 function loadState(){try{return Object.assign(defaultState(),JSON.parse(localStorage.getItem(STORAGE_KEY)||'{}'))}catch{return defaultState()}}
 function saveState(){localStorage.setItem(STORAGE_KEY,JSON.stringify(state))}
 
-function showView(name){Object.values(views).forEach(v=>v.classList.add('hidden'));views[name].classList.remove('hidden');$('#headerMode').textContent=name==='profile'?'Profile':name==='setup'?'Setup':'Discover';window.scrollTo(0,0)}
+function showView(name){Object.values(views).forEach(v=>v.classList.add('hidden'));views[name].classList.remove('hidden');$('#headerMode').textContent=(name==='profile'?'Profile':name==='setup'?'Setup':'Discover')+' · v1.3.0';window.scrollTo(0,0)}
 function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.remove('hidden');clearTimeout(t._timer);t._timer=setTimeout(()=>t.classList.add('hidden'),1800)}
 
-function init(){migrateLegacyFeed();renderCategoryPicker();renderDetailChips();$('#explorationRange').value=state.exploration;bind();if(state.setupComplete||state.history.length){state.setupComplete=true;saveState();showView('swipe');loadDeck()}else{showView('setup')}updateUndo()}
-function migrateLegacyFeed(){const legacy=state.history.filter(h=>['openverse','wikimedia'].includes(String(h.provider||'').toLowerCase())||String(h.source||'').includes('Wikimedia'));if(!legacy.length)return;state.history=state.history.filter(h=>!legacy.includes(h));state.tagScores={};state.queryScores={};state.categoryCounts={};for(const h of state.history)applyLearning(h,1);saveState()}
+function init(){
+  purgeLegacyCaches().catch(()=>{});
+  migrateLegacyFeed();
+  state.appVersion=APP_VERSION;saveState();
+  renderCategoryPicker();renderDetailChips();$('#explorationRange').value=state.exploration;bind();
+  updateBuildDiagnostics();
+  if(state.setupComplete||state.history.length){state.setupComplete=true;saveState();showView('swipe');loadDeck()}else{showView('setup');probeFeed()}
+  updateUndo();
+}
+function migrateLegacyFeed(){const legacy=state.history.filter(h=>['openverse','wikimedia'].includes(String(h.provider||'').toLowerCase())||String(h.source||'').includes('Wikimedia'));if(!legacy.length)return;state.history=state.history.filter(h=>!legacy.includes(h));state.tagScores={};state.queryScores={};state.categoryCounts={};for(const h of state.history)applyLearning(h,1);saveState();toast(`${legacy.length} old non-fashion swipe${legacy.length===1?'':'s'} removed`)}
+async function purgeLegacyCaches(){
+  if('serviceWorker' in navigator){const regs=await navigator.serviceWorker.getRegistrations();await Promise.all(regs.map(r=>r.unregister().catch(()=>false)))}
+  if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)))}
+}
+async function forceUpdate(){
+  const btn=$('#forceUpdateBtn');if(btn)btn.disabled=true;
+  try{await purgeLegacyCaches()}catch{}
+  const base=location.pathname;location.replace(`${base}?build=1.3.0&fresh=${Date.now()}`);
+}
+
 
 function bind(){
   $('#startBtn').onclick=()=>{state.exploration=Number($('#explorationRange').value);state.setupComplete=true;saveState();showView('swipe');loadDeck(true)};
@@ -86,6 +104,7 @@ function bind(){
   document.querySelectorAll('.drawer-item[data-nav]').forEach(b=>b.onclick=()=>{closeDrawer();const n=b.dataset.nav;if(n==='profile')renderProfile();showView(n)});
   $('#changeCategoriesBtn').onclick=()=>{closeDrawer();renderCategoryPicker();showView('setup')};
   $('#clearDataBtn').onclick=()=>{if(confirm('Reset all swipe history and learned preferences?')){const cats=[...state.selectedCategories],explore=state.exploration;state=defaultState();state.selectedCategories=cats;state.exploration=explore;state.setupComplete=true;saveState();deck=[];idx=0;toast('Swipe history reset');closeDrawer();loadDeck(true)}};
+  $('#forceUpdateBtn').onclick=forceUpdate;
   $('#likeBtn').onclick=()=>decide('like'); $('#nopeBtn').onclick=()=>decide('nope'); $('#undoBtn').onclick=undo; $('#detailBtn').onclick=openDetail;
   $('#closeSheetBtn').onclick=closeDetail; $('#sheetBackdrop').onclick=closeDetail; $('#saveDetailBtn').onclick=saveDetail;
   $('#moreBtn').onclick=()=>loadDeck(true);
@@ -108,18 +127,27 @@ async function loadDeck(force=false){
   if(blocking)showLoading(true);
   loadingPromise=(async()=>{
     try{
-      const recipes=chooseRecipes(6),results=[];
-      const batches=await Promise.allSettled(recipes.map(r=>fetchFashionCards(r,Math.floor(Math.random()*4)+1,18)));
-      for(const b of batches)if(b.status==='fulfilled')results.push(...b.value);
+      setFeedHealth('loading','Loading full-body fashion looks…');
+      const pool=await getFrontPosePool(force);
+      const recipes=chooseRecipes(8),results=[];
+      for(const r of recipes)results.push(...cardsForRecipe(pool,r,10));
       const seen=new Set([...state.history.map(h=>h.photoId),...deck.map(x=>x.photoId)]);
       const unique=[];const batchSeen=new Set();
       for(const card of shuffle(results)){if(card?.image&&!seen.has(card.photoId)&&!batchSeen.has(card.photoId)){unique.push(card);batchSeen.add(card.photoId)}if(unique.length>=36)break}
+      if(unique.length<18){
+        for(const r of recipes){
+          for(const card of cardsForRecipe(pool,r,24,true)){if(card?.image&&!seen.has(card.photoId)&&!batchSeen.has(card.photoId)){unique.push(card);batchSeen.add(card.photoId)}if(unique.length>=36)break}
+          if(unique.length>=36)break;
+        }
+      }
       if(force || idx>=deck.length){deck=unique;idx=0}else{deck.push(...unique)}
-      if(!deck.length || idx>=deck.length)throw new Error('No new fashion looks returned.');
+      if(!deck.length || idx>=deck.length)throw new Error('No unseen fashion looks remain in this source.');
+      setFeedHealth('online',`${pool.length} male/androgynous full-body looks loaded`);
       if(blocking){showLoading(false);showCard()}
     }catch(e){
-      if(blocking)showLoading(false);console.error(e);toast('Fashion feed unavailable — try again shortly');
-      if(!activeCard){$('#emptyCard').classList.remove('hidden');$('#emptyCard p').textContent='The fashion-only feed could not load right now. I will not substitute unrelated stock or Wikimedia images. Check your connection and try again.'}
+      feedHealth.lastError=e?.message||String(e);setFeedHealth('error',feedHealth.lastError);
+      if(blocking)showLoading(false);console.error(e);toast('Fashion feed error — open menu for details');
+      if(!activeCard){$('#emptyCard').classList.remove('hidden');$('#emptyCard p').textContent=`Build v1.3.0 loaded, but the fashion source failed: ${feedHealth.lastError}. No unrelated fallback was used.`}
     }finally{loadingPromise=null}
   })();
   return loadingPromise;
@@ -130,87 +158,82 @@ function chooseRecipes(n){const pool=[];for(const cid of state.selectedCategorie
 }
 function weightedSampleNoReplace(items,n,weightFn){const copy=[...items],out=[];while(copy.length&&out.length<n){const weights=copy.map(weightFn),sum=weights.reduce((a,b)=>a+b,0);let r=Math.random()*sum,i=0;for(;i<copy.length;i++){r-=weights[i];if(r<=0)break}out.push(copy.splice(Math.min(i,copy.length-1),1)[0])}return out}
 
-const HF_DATASET='AbstractPhil/qwen-deepfashion';
 const HF_BASE='https://datasets-server.huggingface.co';
-const HF_PAGE='https://huggingface.co/datasets/AbstractPhil/qwen-deepfashion';
-const CONTEXT_SEARCH={
-  office:['blazer','tailored trousers','suit','loafers','knit polo','business casual'],
-  casual:['streetwear','jeans','overshirt','sneakers','casual outfit','wide trousers'],
-  date:['silk shirt','fitted shirt','monochrome outfit','trousers','knit shirt','evening outfit'],
-  nightlife:['sheer','sleeveless','leather','mesh','tank top','metallic'],
-  brunch:['polo shirt','linen shirt','colorful shirt','shorts','relaxed trousers','cardigan'],
-  summer:['shorts','linen','tank top','short sleeve shirt','summer outfit','resort'],
-  workout:['athletic','running shorts','tank top','sportswear','training outfit','track pants'],
-  event:['suit','tuxedo','formalwear','blazer','wedding outfit','dress shoes'],
-  travel:['linen outfit','casual outfit','sneakers','overshirt','resort','lightweight jacket'],
-  cold:['overcoat','sweater','knitwear','winter coat','layered outfit','jacket'],
-  statement:['androgynous','sheer','cropped','avant garde','metallic','bold outfit','fashion editorial']
+const FRONTPOSE_DATASET='zoha-ahmed07/Garment_to_Front_Pose_V1';
+const FRONTPOSE_PAGE='https://huggingface.co/datasets/zoha-ahmed07/Garment_to_Front_Pose_V1';
+const FRONTPOSE_TOTAL=165;
+const CONTEXT_TERMS={
+  office:['button-down','button down','trousers','pants','tailored','blazer','shirt','clean','minimal','sweater'],
+  casual:['denim','jeans','hoodie','sweater','t-shirt','t shirt','casual','sneakers','cargo','modern'],
+  date:['shirt','sweater','lace','sheer','necklace','trousers','modern','clean','fitted','fashion-forward'],
+  nightlife:['mesh','sheer','leather','tactical','edgy','bold','high fashion','lace','harness','crochet'],
+  brunch:['shirt','shorts','sweater','colorful','vibrant','casual','sneakers','denim','patterned'],
+  summer:['shorts','bermuda','mesh','sheer','crochet','lace','short sleeve','sleeveless'],
+  workout:['shorts','athletic','sport','tank','sleeveless','sneakers','technical','hoodie'],
+  event:['suit','blazer','tailored','dress shirt','button-down','button down','formal','trousers','shirt'],
+  travel:['hoodie','denim','sneakers','cargo','jacket','casual','comfortable','sweater'],
+  cold:['jacket','sweater','hoodie','coat','layered','knitted','knit'],
+  statement:['mesh','sheer','lace','patterned','tactical','bold','vibrant','high fashion','fashion-forward','androgynous','harness','crochet']
 };
 const STYLE_PATTERNS=[
-  ['wide-leg',/wide[- ]leg|baggy trouser|wide trouser/i],['slim-fit',/slim fit|skinny|narrow trouser/i],['relaxed-fit',/relaxed fit|loose fit|oversized/i],['fitted',/fitted|body[- ]hugging|slim[- ]cut/i],['cropped',/cropped|crop top/i],['tailored',/tailor|structured blazer|pleated trouser/i],
-  ['shorts',/\bshorts\b|short trousers/i],['short-shorts',/short shorts|very short shorts|thigh[- ]length shorts/i],['trousers',/\btrousers\b|dress pants|slacks/i],['denim',/denim|jeans/i],['leather',/leather/i],['linen',/linen/i],['knitwear',/knit|sweater|cardigan/i],['sheer',/sheer|transparent|mesh/i],
-  ['tank',/tank top|sleeveless top|singlet/i],['polo',/polo shirt|knit polo/i],['button-down',/button[- ]down|button[- ]up|dress shirt/i],['blazer',/blazer|sport coat/i],['suit',/\bsuit\b|tuxedo/i],['coat',/overcoat|trench coat|topcoat/i],
-  ['loafers',/loafer/i],['sneakers',/sneaker|trainer/i],['boots',/\bboots?\b/i],['dress-shoes',/oxford|derby shoe|dress shoe/i],['sandals',/sandal/i],
-  ['monochrome',/monochrome|all[- ]black|all[- ]white/i],['color',/colorful|bright color|vibrant|colourful/i],['pattern',/pattern|stripe|plaid|checkered|print/i],['layering',/layered|layering|over.*shirt|under.*jacket/i],['accessories',/necklace|bracelet|ring|bag|belt|sunglasses|scarf/i],['statement',/statement|bold|avant[- ]garde|dramatic|fashion[- ]forward/i]
+  ['wide-leg',/wide[- ]leg|baggy (?:pants|trousers)/i],['relaxed-fit',/relaxed|loose|oversized|baggy/i],['fitted',/fitted|slim[- ]fit|body[- ]hugging/i],['cropped',/cropped|crop top/i],['tailored',/tailor|blazer|suit/i],
+  ['shorts',/\bshorts\b|bermuda/i],['short-shorts',/short shorts|very short shorts|thigh[- ]length shorts/i],['trousers',/\btrousers\b|\bpants\b|slacks/i],['denim',/denim|jeans/i],['cargo',/cargo/i],['leather',/leather/i],['knitwear',/knit|sweater|cardigan/i],['sheer',/sheer|transparent|mesh|lace/i],
+  ['tank',/tank top|sleeveless top|singlet/i],['button-down',/button[- ]down|button[- ]up/i],['blazer',/blazer|sport coat/i],['suit',/\bsuit\b|tuxedo/i],['jacket',/\bjacket\b/i],
+  ['sneakers',/sneaker|trainer/i],['boots',/\bboots?\b/i],['sandals',/sandal/i],['necklace',/necklace|bead/i],['sunglasses',/sunglasses/i],['harness',/harness|tactical vest/i],
+  ['color',/colorful|bright|vibrant|green|blue|red|purple|yellow|orange/i],['pattern',/pattern|stripe|plaid|checkered|floral|graphic/i],['layering',/layered|layering|vest|jacket over/i],['statement',/statement|bold|avant[- ]garde|dramatic|fashion[- ]forward|high fashion|edgy/i]
 ];
 
-function searchTermFor(r){const a=CONTEXT_SEARCH[r.categoryId]||['fashion outfit'];return a[Math.floor(Math.random()*a.length)]}
-function isAllowedGender(row,r){const g=String(row.gender||'').toLowerCase();if(!g)return true;if(g==='man'||g==='male')return true;return r.categoryId==='statement'&&(g==='person'||g==='androgynous')}
-function imageSrc(v){if(!v)return'';if(typeof v==='string')return v;if(typeof v==='object')return v.src||v.url||v.path||'';return''}
-function fashionCaption(row){return String(row.caption_joycaption||row.caption_qwen35_4b||row.source_prompt||row.prompt||row.caption_animetimm||'').replace(/\s+/g,' ').trim()}
-function actualTags(caption,base){const found=[];for(const [tag,re] of STYLE_PATTERNS)if(re.test(caption))found.push(tag);const merged=[...found,...base.filter(t=>found.length<3||['queer','nightlife','formal','summer','winter','gym','travel'].includes(t))];return [...new Set(merged)].slice(0,8)}
-
-async function fetchFashionCards(r,page=1,pageSize=18){
-  const term=searchTermFor(r);
-  let rows=[];
-  try{rows=await hfSearch(term,(page-1)*pageSize,Math.min(100,pageSize*3))}catch(e){console.warn('Fashion search failed; trying fashion preview pool.',e)}
-  let cards=rows.map(x=>cardFromHF(x,r,term)).filter(Boolean);
-  if(cards.length<5){
-    try{
-      const preview=await hfPreviewPool();
-      const ranked=preview.map(x=>({x,score:relevanceScore(x?.row||{},term,r)})).filter(z=>z.score>0).sort((a,b)=>b.score-a.score).slice(0,pageSize*2).map(z=>z.x);
-      cards.push(...ranked.map(x=>cardFromHF(x,r,term)).filter(Boolean));
-    }catch(e){console.warn('Fashion preview fallback failed.',e)}
-  }
-  const unique=[];const seen=new Set();for(const c of cards){if(!seen.has(c.photoId)){seen.add(c.photoId);unique.push(c)}if(unique.length>=pageSize)break}
-  return unique;
+let _frontPosePoolPromise=null;
+let feedHealth={status:'checking',detail:'Waiting for source test.',lastError:''};
+function setFeedHealth(status,detail=''){
+  feedHealth.status=status;feedHealth.detail=detail||'';
+  const label=status==='online'?'online':status==='loading'?'loading':status==='error'?'error':'checking';
+  const setup=$('#setupFeedStatus');if(setup){setup.textContent=label;setup.dataset.status=status}
+  const badge=$('#feedStatusBadge');if(badge){badge.textContent=`feed: ${label}`;badge.dataset.status=status}
+  const drawer=$('#drawerFeedStatus');if(drawer){drawer.textContent=label;drawer.dataset.status=status}
+  const d=$('#drawerFeedDetail');if(d)d.textContent=detail||'Fashion-only source.';
 }
-
-async function hfSearch(term,offset=0,length=54){
-  const params=new URLSearchParams({dataset:HF_DATASET,config:'default',split:'train',query:term,offset:String(offset),length:String(Math.min(100,length))});
-  let res=await fetch(`${HF_BASE}/search?${params.toString()}`,{headers:{Accept:'application/json'}});
-  if(!res.ok && offset){params.set('offset','0');res=await fetch(`${HF_BASE}/search?${params.toString()}`,{headers:{Accept:'application/json'}})}
-  if(!res.ok)throw new Error(`Hugging Face fashion search ${res.status}`);
-  const j=await res.json();return j.rows||[];
-}
-
-let _previewPromise=null;
-async function hfPreviewPool(){
-  if(_previewPromise)return _previewPromise;
-  _previewPromise=(async()=>{
-    const all=[];
-    for(const config of ['rank0','rank1']){
-      const params=new URLSearchParams({dataset:HF_DATASET,config,split:'train',offset:'0',length:'100'});
-      const res=await fetch(`${HF_BASE}/rows?${params.toString()}`,{headers:{Accept:'application/json'}});
-      if(res.ok){const j=await res.json();all.push(...(j.rows||[]))}
-    }
-    if(!all.length)throw new Error('No fashion preview rows');
-    return all;
+function updateBuildDiagnostics(){const b=$('#drawerBuild');if(b)b.textContent='v1.3.0';setFeedHealth(feedHealth.status,feedHealth.detail)}
+async function probeFeed(){try{setFeedHealth('loading','Testing fashion source…');const p=await getFrontPosePool(false);setFeedHealth('online',`${p.length} male/androgynous full-body looks available`)}catch(e){feedHealth.lastError=e?.message||String(e);setFeedHealth('error',feedHealth.lastError)}}
+function fetchWithTimeout(url,ms=12000){const ctl=new AbortController();const t=setTimeout(()=>ctl.abort(),ms);return fetch(url,{headers:{Accept:'application/json'},signal:ctl.signal}).finally(()=>clearTimeout(t))}
+async function getFrontPosePool(force=false){
+  if(force)_frontPosePoolPromise=null;
+  if(_frontPosePoolPromise)return _frontPosePoolPromise;
+  _frontPosePoolPromise=(async()=>{
+    const chunks=[[0,100],[100,65]];
+    const settled=await Promise.allSettled(chunks.map(async([offset,length])=>{
+      const params=new URLSearchParams({dataset:FRONTPOSE_DATASET,config:'default',split:'train',offset:String(offset),length:String(length)});
+      const res=await fetchWithTimeout(`${HF_BASE}/rows?${params.toString()}`,15000);
+      if(!res.ok)throw new Error(`fashion source HTTP ${res.status}`);
+      const j=await res.json();return j.rows||[];
+    }));
+    const rows=[];const errors=[];
+    for(const x of settled){if(x.status==='fulfilled')rows.push(...x.value);else errors.push(x.reason?.message||String(x.reason))}
+    if(!rows.length)throw new Error(errors.join('; ')||'fashion source returned zero rows');
+    const dedup=[];const seen=new Set();
+    for(const rec of rows){const cap=frontPoseCaption(rec).toLowerCase();if(!cap||seen.has(cap))continue;seen.add(cap);dedup.push(rec)}
+    return dedup;
   })();
-  return _previewPromise;
+  return _frontPosePoolPromise;
 }
-function relevanceScore(rec,term,r){const row=rec?.row||rec; if(!isAllowedGender(row,r))return-100;const text=fashionCaption(row).toLowerCase();let score=0;for(const tok of term.toLowerCase().split(/\s+/))if(tok.length>3&&text.includes(tok))score+=2;for(const t of r.tags)if(text.includes(String(t).replace('-',' ')))score+=1;return score}
-function cardFromHF(rec,r,term){
-  const row=rec?.row||rec||{};if(!isAllowedGender(row,r))return null;
-  const image=imageSrc(row.image);if(!image)return null;
-  const caption=fashionCaption(row);if(!caption)return null;
-  const id=row.id||rec.row_idx||image;
-  const tags=actualTags(caption,r.tags);
-  return{photoId:'hf:'+String(id),image,thumb:image,url:HF_PAGE,photographer:'Fashion-only dataset',photographerUrl:HF_PAGE,alt:caption,imageTitle:row.source_prompt||r.title,source:'Qwen DeepFashion · Hugging Face',provider:'huggingface',license:'fashion generation dataset',licenseVersion:'',licenseUrl:HF_PAGE,title:r.title,query:r.query,searchTerm:term,tags,categoryId:r.categoryId,categoryName:r.categoryName,datasetGender:row.gender||'',aiGenerated:true};
+function frontPoseCaption(rec){return String(rec?.row?.front_pose_caption_sentence||'').replace(/^\s*["']+|["']+\s*$/g,'').replace(/\s+/g,' ').trim()}
+function imageSrc(v){if(!v)return'';if(typeof v==='string')return v;if(typeof v==='object')return v.src||v.url||v.path||'';return''}
+function actualTags(caption,base=[]){const found=[];for(const [tag,re] of STYLE_PATTERNS)if(re.test(caption))found.push(tag);for(const t of base){const plain=String(t).replaceAll('-',' ');if(caption.toLowerCase().includes(plain))found.push(t)}return [...new Set(found)].slice(0,10)}
+function scoreForRecipe(rec,r){const text=frontPoseCaption(rec).toLowerCase();let score=0;for(const term of CONTEXT_TERMS[r.categoryId]||[]){if(text.includes(term))score+=term.includes(' ')?3:2}for(const t of r.tags){if(text.includes(String(t).replaceAll('-',' ')))score+=2}if(/full-length|full length/.test(text))score+=1;return score}
+function cardsForRecipe(pool,r,limit=10,relaxed=false){
+  const ranked=pool.map(rec=>({rec,score:scoreForRecipe(rec,r),jitter:Math.random()})).sort((a,b)=>(b.score-a.score)||(b.jitter-a.jitter));
+  const candidates=ranked.filter(x=>relaxed||x.score>0).slice(0,relaxed?60:35);
+  return shuffle(candidates).slice(0,limit).map(x=>cardFromFrontPose(x.rec,r,x.score)).filter(Boolean);
+}
+function cardFromFrontPose(rec,r,score=0){
+  const row=rec?.row||{};const image=imageSrc(row.front_pose_image)||imageSrc(row.product_image);if(!image)return null;
+  const caption=frontPoseCaption(rec);if(!caption)return null;
+  const id=rec.row_idx??caption;const tags=actualTags(caption,r.tags);
+  return{photoId:'frontpose:'+String(id),image,thumb:image,url:FRONTPOSE_PAGE,photographer:'Front Pose fashion dataset',photographerUrl:FRONTPOSE_PAGE,alt:caption,imageTitle:r.title,source:'Garment → Front Pose · Hugging Face',provider:'frontpose',license:'dataset source',licenseVersion:'',licenseUrl:FRONTPOSE_PAGE,title:r.title,query:r.query,searchTerm:r.categoryId,tags,categoryId:r.categoryId,categoryName:r.categoryName,datasetGender:/androgynous/i.test(caption)?'androgynous':'male',matchScore:score,aiGenerated:true};
 }
 
 function showLoading(on){$('#loadingCard').classList.toggle('hidden',!on);$('#swipeCard').classList.toggle('hidden',on);$('#emptyCard').classList.add('hidden')}
-function showCard(){resetTransform();if(idx>=deck.length){activeCard=null;$('#swipeCard').classList.add('hidden');$('#emptyCard').classList.remove('hidden');return}activeCard=deck[idx];$('#swipeCard').classList.remove('hidden');$('#emptyCard').classList.add('hidden');$('#outfitImage').src=activeCard.image;$('#outfitImage').alt=activeCard.alt||activeCard.title;$('#cardCategory').textContent=activeCard.categoryName;$('#cardTitle').textContent=activeCard.title;$('#cardDescription').textContent=activeCard.alt||`Search recipe: ${activeCard.query}`;$('#cardSource').textContent=`${activeCard.photographer} · ${activeCard.source||'Fashion feed'}`;$('#cardSource').href=activeCard.url||HF_PAGE;$('#cardTags').innerHTML=activeCard.tags.map(t=>`<span>${esc(t)}</span>`).join('');$('#progressText').textContent=`${state.history.length} swipes learned`;$('#categoryFilterBtn').textContent=activeCard.categoryName+' ▾';$('#categoryFilterBtn').onclick=()=>{renderCategoryPicker();showView('setup')};updateUndo()}
+function showCard(){resetTransform();if(idx>=deck.length){activeCard=null;$('#swipeCard').classList.add('hidden');$('#emptyCard').classList.remove('hidden');return}activeCard=deck[idx];$('#swipeCard').classList.remove('hidden');$('#emptyCard').classList.add('hidden');const img=$('#outfitImage');img.onerror=()=>{img.onerror=null;idx++;showCard();if(deck.length-idx<=5)loadDeck(false)};img.src=activeCard.image;img.alt=activeCard.alt||activeCard.title;$('#cardCategory').textContent=activeCard.categoryName;$('#cardTitle').textContent=activeCard.title;$('#cardDescription').textContent=activeCard.alt||`Search recipe: ${activeCard.query}`;$('#cardSource').textContent=`${activeCard.photographer} · ${activeCard.source||'Fashion feed'}`;$('#cardSource').href=activeCard.url||FRONTPOSE_PAGE;$('#cardTags').innerHTML=activeCard.tags.map(t=>`<span>${esc(t)}</span>`).join('');$('#progressText').textContent=`${state.history.length} swipes learned · v1.3.0`;$('#categoryFilterBtn').textContent=activeCard.categoryName+' ▾';$('#categoryFilterBtn').onclick=()=>{renderCategoryPicker();showView('setup')};updateUndo()}
 
 function applyLearning(h,direction){const val=(h.decision==='like'?1:-.55)*direction;for(const t of h.tags){state.tagScores[t]=(state.tagScores[t]||0)+val}state.queryScores[h.query]=(state.queryScores[h.query]||0)+val;state.categoryCounts[h.categoryId]=(state.categoryCounts[h.categoryId]||0)+direction}
 function undo(){const h=state.history.pop();if(!h)return;applyLearning(h,-1);saveState();if(idx>0)idx--;if(deck[idx]?.photoId!==h.photoId){deck.splice(idx,0,{...h})}showCard();toast('Last swipe undone')}
@@ -244,5 +267,4 @@ function escAttr(s){return esc(s).replace(/"/g,'&quot;')}
 // Preserve optional detail on the exact card when the swipe is recorded.
 function decide(decision){if(!activeCard)return;const pending=activeCard.pendingDetail;animateDecision(decision,()=>{const h={...activeCard,decision,detailTags:pending?.tags||[],note:pending?.note||'',timestamp:new Date().toISOString()};delete h.pendingDetail;state.history.push(h);applyLearning(h,1);if(h.detailTags?.length){for(const t of h.detailTags){const k=`detail:${t}`;state.tagScores[k]=(state.tagScores[k]||0)+(decision==='like'?1.15:-.65)}}saveState();idx++;showCard();if(deck.length-idx<=5)loadDeck(false)})}
 
-if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
 init();

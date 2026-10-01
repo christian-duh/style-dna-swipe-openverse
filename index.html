@@ -6,9 +6,9 @@
   <meta name="theme-color" content="#101014" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <title>Style DNA</title>
-  <link rel="manifest" href="manifest.webmanifest" />
-  <link rel="stylesheet" href="styles.css" />
+  <title>Style DNA v1.3.0</title>
+  <link rel="manifest" href="manifest.webmanifest?v=1.3.0" />
+  <link rel="stylesheet" href="styles.css?v=1.3.0" />
 </head>
 <body>
   <div id="app" class="app-shell">
@@ -16,7 +16,7 @@
       <button class="icon-btn" id="menuBtn" aria-label="Open menu">☰</button>
       <div class="brand">
         <span class="brand-mark">S</span>
-        <div><strong>Style DNA</strong><small id="headerMode">Discover</small></div>
+        <div><strong>Style DNA</strong><small id="headerMode">Discover · v1.3.0</small></div>
       </div>
       <button class="icon-btn" id="statsBtn" aria-label="Open style profile">◉</button>
     </header>
@@ -30,9 +30,9 @@
         </div>
 
         <div class="panel">
-          <h2>1. Fashion-only feed: ready</h2>
-          <p class="muted"><strong>No generic image search.</strong> Style DNA now pulls only from a dedicated full-body fashion dataset, filters for male/masculine-presenting looks, and uses outfit captions to keep the swipe evidence machine-readable. If that feed is unavailable, the app stops instead of substituting random photos.</p>
-          <a class="text-link" href="https://huggingface.co/datasets/AbstractPhil/qwen-deepfashion" target="_blank" rel="noopener">View the fashion dataset ↗</a>
+          <h2>1. Fashion-only feed <span id="setupFeedStatus" class="status-inline">checking…</span></h2>
+          <p class="muted"><strong>Build v1.3.0.</strong> This build uses a compact male/androgynous full-body fashion dataset with detailed outfit captions. It does not use Openverse, Wikimedia, or generic image search. If the source fails, Style DNA shows the exact error instead of silently substituting unrelated images.</p>
+          <a class="text-link" href="https://huggingface.co/datasets/zoha-ahmed07/Garment_to_Front_Pose_V1" target="_blank" rel="noopener">View the current fashion source ↗</a>
         </div>
 
         <div class="panel">
@@ -54,6 +54,7 @@
         <div class="session-strip">
           <button id="categoryFilterBtn" class="pill"></button>
           <span id="progressText" class="muted small"></span>
+          <span id="feedStatusBadge" class="feed-status-badge">feed: checking</span>
         </div>
 
         <div class="card-stage" id="cardStage">
@@ -63,7 +64,7 @@
             <img id="outfitImage" alt="Fashion outfit" draggable="false" />
             <div class="image-fade"></div>
             <div class="card-copy">
-              <div class="card-label-row"><span id="cardCategory" class="mini-pill"></span><a id="cardSource" class="photo-credit" href="https://huggingface.co/datasets/AbstractPhil/qwen-deepfashion" target="_blank" rel="noopener"></a></div>
+              <div class="card-label-row"><span id="cardCategory" class="mini-pill"></span><a id="cardSource" class="photo-credit" href="https://huggingface.co/datasets/zoha-ahmed07/Garment_to_Front_Pose_V1" target="_blank" rel="noopener"></a></div>
               <h2 id="cardTitle"></h2>
               <p id="cardDescription"></p>
               <div id="cardTags" class="tag-row"></div>
@@ -129,11 +130,17 @@
       <button class="drawer-item" data-nav="profile">Style profile</button>
       <button class="drawer-item" id="changeCategoriesBtn">Edit life contexts</button>
       <button class="drawer-item" id="clearDataBtn">Reset swipe history</button>
-      <div class="drawer-foot">Private by default: your swipe preferences live in your browser's local storage. No API key is required.</div>
+      <div class="drawer-diagnostics">
+        <div><span>Build</span><strong id="drawerBuild">v1.3.0</strong></div>
+        <div><span>Fashion feed</span><strong id="drawerFeedStatus">checking…</strong></div>
+        <small id="drawerFeedDetail">Waiting for source test.</small>
+      </div>
+      <button class="drawer-item" id="forceUpdateBtn">Force app update / clear cache</button>
+      <div class="drawer-foot">Private by default: your swipe preferences live in your browser's local storage. Force update clears app caches, not swipe history.</div>
     </aside>
   </div>
 
   <div id="toast" class="toast hidden"></div>
-  <script src="app.js"></script>
+  <script src="app.js?v=1.3.0"></script>
 </body>
 </html>
