@@ -1,49 +1,37 @@
-# Style DNA — Openverse build
+# Style DNA — Fashion-only build (v1.2)
 
-A mobile-first swipe app for learning your fashion preferences from real outfit photography and exporting the evidence for deeper analysis in ChatGPT.
+This build fixes the biggest problem in the prior version: **the swipe deck is no longer sourced from a generic image search.**
 
-## What changed
+## Image source
 
-This build replaces Pexels with **Openverse**. Openverse supports anonymous API requests, so there is **no API key, account, or secret to configure**. If an Openverse request fails or returns nothing, the app automatically falls back to the public Wikimedia Commons API, which also supports anonymous browser requests. Search results preserve creator, source, and license metadata.
+The app now uses the public Hugging Face Dataset Viewer API against `AbstractPhil/qwen-deepfashion`, a purpose-built dataset of full-body fashion looks with rich outfit captions. It filters the feed to male/masculine-presenting looks (with `person` allowed only in the statement/androgynous context). No API key is required for public Dataset Viewer access.
 
-## What the app does
+The app deliberately has **no Openverse/Wikimedia fallback**. If the fashion feed cannot load, it shows an error rather than serving irrelevant photography.
 
-- Tinder-like left/right swipe interface optimized for a phone.
-- Searches across 11 life contexts: office, everyday casual, dates, nightlife, brunch/social, hot weather/shorts, workout, events, travel, cold weather, and queer/statement fashion.
-- Each search recipe carries structured style tags so a swipe produces machine-readable preference evidence even when the source caption is sparse.
-- Optional detail chips let you mark why an unusually informative outfit worked or failed without interrupting every swipe.
-- Adaptive sampling gradually gives more weight to styles that test well while preserving an adjustable exploration rate.
-- Stores preferences locally in the browser.
-- Exports JSON, CSV, a full ChatGPT analysis packet, and a compact shopping brief.
-- Progressive Web App manifest/service worker support Add to Home Screen when hosted over HTTPS such as GitHub Pages.
+## What stays the same
 
-## Setup — easiest phone workflow
+- Tinder-style left/right swiping
+- 11 life contexts
+- optional “why?” detail tags
+- adaptive exploration
+- local browser storage
+- Style DNA dashboard
+- JSON/CSV/ChatGPT/shopping-brief exports
 
-1. Create a new GitHub repository, for example `style-dna`.
-2. Upload the contents of this folder **to the root of the repository**.
-3. In GitHub, open **Settings → Pages**.
-4. Under **Build and deployment**, choose **Deploy from a branch**.
-5. Pick the `main` branch and `/ (root)`, then Save.
-6. Open the Pages URL on iPhone Safari.
-7. Tap **Share → Add to Home Screen**.
-8. Launch Style DNA, choose your life contexts, and start swiping. No API setup is required.
+## Upgrade an existing GitHub Pages install
 
-## Recommended training protocol
+1. Upload/overwrite every file in this folder at the root of your existing repository.
+2. Commit the changes.
+3. Keep the existing GitHub Pages configuration.
+4. Fully close the old Home Screen app/Safari tab, then reopen it. The service worker cache version is bumped and old app caches are deleted on activation.
+5. Start swiping.
 
-- First pass: 100–150 fast swipes across all relevant contexts. Use the detail button only when a reaction has a clear reason.
-- First analysis: export/copy the ChatGPT brief. Ask ChatGPT to identify strong signals, contradictions, and the biggest uncertainties.
-- Second pass: 50–100 targeted swipes designed around those uncertainties rather than just showing more of what already tested well.
-- Wardrobe design: after roughly 200–300 informative swipes, translate the profile into a wardrobe architecture, then into exact shopping targets.
-- Keep a smaller challenge stream forever so exploration prevents the model from freezing you into an early version of your style.
+The app automatically discards old Openverse/Wikimedia swipe records so irrelevant cards do not contaminate the style profile.
 
-## Data model
+## Why this source is better
 
-Every swipe stores the like/nope decision, life context, style recipe/query, structured style tags, source description/title, image/source link, creator, source/provider, license metadata, optional user detail tags and note, and timestamp.
+Unlike Openverse/Wikimedia, the source pool is itself a fashion dataset. Each record includes a full-body fashion image plus detailed image-grounded captions, allowing the app to extract actual style signals such as tailoring, wide-leg trousers, shorts, denim, knitwear, sheer/mesh, loafers, sneakers, layering, color, and statement styling.
 
-## Privacy
+## Current limitation
 
-There is no backend in this build. Swipe history stays in browser localStorage. Exported files are only created when you press an export control.
-
-## Notes / limitations
-
-Openverse searches openly licensed media from multiple providers, with Wikimedia Commons as a no-key fallback; neither is a purpose-built menswear lookbook. Search quality can vary. The app therefore retains the query/style recipe and source metadata, and irrelevant cards can simply be rejected. A later version can add a curated fashion feed, AI vision descriptions, user-uploaded inspiration, closet inventory, and live shopping links.
+The main dataset is AI-generated rather than Pinterest photography. It is useful for controlled preference discovery because the images are full-body and richly described, but a future build can add a Pinterest-board ingestion mode for real-world inspiration while retaining this controlled feed for targeted A/B style testing.
