@@ -1,5 +1,5 @@
 const STORAGE_KEY='styleDNA.v1';
-const APP_VERSION='1.3.0-frontpose';
+const APP_VERSION='1.4.0-wearable-mix';
 
 const CATEGORIES=[
   {id:'office',name:'Office',emoji:'◼',queries:[
@@ -68,23 +68,25 @@ let deck=[]; let idx=0; let activeCard=null; let drag={on:false,startX:0,current
 const $=s=>document.querySelector(s);
 const views={setup:$('#setupView'),swipe:$('#swipeView'),profile:$('#profileView')};
 
-function defaultState(){return{selectedCategories:CATEGORIES.map(c=>c.id),exploration:35,history:[],tagScores:{},queryScores:{},categoryCounts:{},lastCategory:null,setupComplete:false,createdAt:new Date().toISOString(),appVersion:APP_VERSION}}
+function defaultState(){return{selectedCategories:CATEGORIES.map(c=>c.id),exploration:35,statementFrequency:15,history:[],tagScores:{},queryScores:{},categoryCounts:{},lastCategory:null,setupComplete:false,createdAt:new Date().toISOString(),appVersion:APP_VERSION}}
 function loadState(){try{return Object.assign(defaultState(),JSON.parse(localStorage.getItem(STORAGE_KEY)||'{}'))}catch{return defaultState()}}
 function saveState(){localStorage.setItem(STORAGE_KEY,JSON.stringify(state))}
 
-function showView(name){Object.values(views).forEach(v=>v.classList.add('hidden'));views[name].classList.remove('hidden');$('#headerMode').textContent=(name==='profile'?'Profile':name==='setup'?'Setup':'Discover')+' · v1.3.0';window.scrollTo(0,0)}
+function showView(name){Object.values(views).forEach(v=>v.classList.add('hidden'));views[name].classList.remove('hidden');$('#headerMode').textContent=(name==='profile'?'Profile':name==='setup'?'Setup':'Discover')+' · v1.4.0';window.scrollTo(0,0)}
 function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.remove('hidden');clearTimeout(t._timer);t._timer=setTimeout(()=>t.classList.add('hidden'),1800)}
 
 function init(){
   purgeLegacyCaches().catch(()=>{});
   migrateLegacyFeed();
-  state.appVersion=APP_VERSION;saveState();
-  renderCategoryPicker();renderDetailChips();$('#explorationRange').value=state.exploration;bind();
+  migrateV14Learning();state.appVersion=APP_VERSION;saveState();
+  renderCategoryPicker();renderDetailChips();$('#explorationRange').value=state.exploration;$('#statementRange').value=state.statementFrequency??15;updateStatementMixLabel();bind();
   updateBuildDiagnostics();
   if(state.setupComplete||state.history.length){state.setupComplete=true;saveState();showView('swipe');loadDeck()}else{showView('setup');probeFeed()}
   updateUndo();
 }
 function migrateLegacyFeed(){const legacy=state.history.filter(h=>['openverse','wikimedia'].includes(String(h.provider||'').toLowerCase())||String(h.source||'').includes('Wikimedia'));if(!legacy.length)return;state.history=state.history.filter(h=>!legacy.includes(h));state.tagScores={};state.queryScores={};state.categoryCounts={};for(const h of state.history)applyLearning(h,1);saveState();toast(`${legacy.length} old non-fashion swipe${legacy.length===1?'':'s'} removed`)}
+function migrateV14Learning(){if(state.appVersion===APP_VERSION)return;state.statementFrequency=Number.isFinite(Number(state.statementFrequency))?Number(state.statementFrequency):15;state.tagScores={};state.queryScores={};state.categoryCounts={};for(const h of state.history){if(h.provider==='frontpose'&&!h.feedTier)h.feedTier='statement';applyLearning(h,1)}saveState()}
+function updateStatementMixLabel(){const v=Number($('#statementRange')?.value??state.statementFrequency??15);const el=$('#statementMixLabel');if(el)el.textContent=`${100-v}% everyday · ${v}% statement`;const everyday=$('#statementEverydayPct');if(everyday)everyday.textContent=`${100-v}% everyday`;const edge=$('#statementEdgePct');if(edge)edge.textContent=`${v}% statement`}
 async function purgeLegacyCaches(){
   if('serviceWorker' in navigator){const regs=await navigator.serviceWorker.getRegistrations();await Promise.all(regs.map(r=>r.unregister().catch(()=>false)))}
   if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)))}
@@ -92,18 +94,19 @@ async function purgeLegacyCaches(){
 async function forceUpdate(){
   const btn=$('#forceUpdateBtn');if(btn)btn.disabled=true;
   try{await purgeLegacyCaches()}catch{}
-  const base=location.pathname;location.replace(`${base}?build=1.3.0&fresh=${Date.now()}`);
+  const base=location.pathname;location.replace(`${base}?build=1.4.0&fresh=${Date.now()}`);
 }
 
 
 function bind(){
-  $('#startBtn').onclick=()=>{state.exploration=Number($('#explorationRange').value);state.setupComplete=true;saveState();showView('swipe');loadDeck(true)};
+  $('#startBtn').onclick=()=>{state.exploration=Number($('#explorationRange').value);state.statementFrequency=Number($('#statementRange').value);state.setupComplete=true;saveState();showView('swipe');loadDeck(true)};
   $('#explorationRange').oninput=e=>{state.exploration=Number(e.target.value);saveState()};
+  $('#statementRange').oninput=e=>{state.statementFrequency=Number(e.target.value);saveState();updateStatementMixLabel()};
   $('#statsBtn').onclick=()=>{renderProfile();showView('profile')}; $('#backToSwipeBtn').onclick=()=>showView('swipe');
   $('#menuBtn').onclick=openDrawer; $('#closeDrawerBtn').onclick=closeDrawer;
   document.querySelectorAll('.drawer-item[data-nav]').forEach(b=>b.onclick=()=>{closeDrawer();const n=b.dataset.nav;if(n==='profile')renderProfile();showView(n)});
   $('#changeCategoriesBtn').onclick=()=>{closeDrawer();renderCategoryPicker();showView('setup')};
-  $('#clearDataBtn').onclick=()=>{if(confirm('Reset all swipe history and learned preferences?')){const cats=[...state.selectedCategories],explore=state.exploration;state=defaultState();state.selectedCategories=cats;state.exploration=explore;state.setupComplete=true;saveState();deck=[];idx=0;toast('Swipe history reset');closeDrawer();loadDeck(true)}};
+  $('#clearDataBtn').onclick=()=>{if(confirm('Reset all swipe history and learned preferences?')){const cats=[...state.selectedCategories],explore=state.exploration,statementFrequency=state.statementFrequency;state=defaultState();state.selectedCategories=cats;state.exploration=explore;state.statementFrequency=statementFrequency;state.setupComplete=true;saveState();deck=[];idx=0;toast('Swipe history reset');closeDrawer();loadDeck(true)}};
   $('#forceUpdateBtn').onclick=forceUpdate;
   $('#likeBtn').onclick=()=>decide('like'); $('#nopeBtn').onclick=()=>decide('nope'); $('#undoBtn').onclick=undo; $('#detailBtn').onclick=openDetail;
   $('#closeSheetBtn').onclick=closeDetail; $('#sheetBackdrop').onclick=closeDetail; $('#saveDetailBtn').onclick=saveDetail;
@@ -127,38 +130,64 @@ async function loadDeck(force=false){
   if(blocking)showLoading(true);
   loadingPromise=(async()=>{
     try{
-      setFeedHealth('loading','Loading full-body fashion looks…');
-      const pool=await getFrontPosePool(force);
-      const recipes=chooseRecipes(8),results=[];
-      for(const r of recipes)results.push(...cardsForRecipe(pool,r,10));
-      const seen=new Set([...state.history.map(h=>h.photoId),...deck.map(x=>x.photoId)]);
-      const unique=[];const batchSeen=new Set();
-      for(const card of shuffle(results)){if(card?.image&&!seen.has(card.photoId)&&!batchSeen.has(card.photoId)){unique.push(card);batchSeen.add(card.photoId)}if(unique.length>=36)break}
-      if(unique.length<18){
+      setFeedHealth('loading','Loading mostly-everyday menswear + a smaller statement pool…');
+      const [everydayPool,statementPool]=await Promise.all([getEverydayPool(force),getFrontPosePool(force)]);
+      const recipes=chooseRecipes(8),unique=[],batchSeen=new Set();
+      const alreadySeen=new Set([...state.history.map(h=>h.photoId),...deck.map(x=>x.photoId)]);
+      for(const r of recipes){
+        const slots=4;
+        const edgeShare=statementShareForCategory(r.categoryId);
+        let edgeSlots=Math.round(slots*edgeShare);
+        if(r.categoryId==='statement')edgeSlots=Math.max(2,edgeSlots);
+        const everydaySlots=Math.max(1,slots-edgeSlots);
+        const normals=cardsForEverydayRecipe(everydayPool,r,everydaySlots+3);
+        const edges=cardsForRecipe(statementPool,r,edgeSlots+2,true);
+        const blended=shuffle([...normals.slice(0,everydaySlots),...edges.slice(0,edgeSlots)]);
+        for(const card of blended){if(card?.image&&!alreadySeen.has(card.photoId)&&!batchSeen.has(card.photoId)){unique.push(card);batchSeen.add(card.photoId)}}
+      }
+      // Fill shortages from everyday looks first. Statement looks are deliberately the minority.
+      if(unique.length<28){
         for(const r of recipes){
-          for(const card of cardsForRecipe(pool,r,24,true)){if(card?.image&&!seen.has(card.photoId)&&!batchSeen.has(card.photoId)){unique.push(card);batchSeen.add(card.photoId)}if(unique.length>=36)break}
-          if(unique.length>=36)break;
+          for(const card of cardsForEverydayRecipe(everydayPool,r,12)){if(card?.image&&!alreadySeen.has(card.photoId)&&!batchSeen.has(card.photoId)){unique.push(card);batchSeen.add(card.photoId)}if(unique.length>=32)break}
+          if(unique.length>=32)break;
+        }
+      }
+      if(unique.length<24){
+        for(const r of recipes){
+          for(const card of cardsForRecipe(statementPool,r,8,true)){if(card?.image&&!alreadySeen.has(card.photoId)&&!batchSeen.has(card.photoId)){unique.push(card);batchSeen.add(card.photoId)}if(unique.length>=28)break}
+          if(unique.length>=28)break;
         }
       }
       if(force || idx>=deck.length){deck=unique;idx=0}else{deck.push(...unique)}
-      if(!deck.length || idx>=deck.length)throw new Error('No unseen fashion looks remain in this source.');
-      setFeedHealth('online',`${pool.length} male/androgynous full-body looks loaded`);
+      if(!deck.length || idx>=deck.length)throw new Error('No unseen fashion looks remain in the current source pools.');
+      setFeedHealth('online',`${everydayPool.length} everyday + ${statementPool.length} statement looks ready · default ${100-(state.statementFrequency??15)}% everyday`);
       if(blocking){showLoading(false);showCard()}
     }catch(e){
       feedHealth.lastError=e?.message||String(e);setFeedHealth('error',feedHealth.lastError);
       if(blocking)showLoading(false);console.error(e);toast('Fashion feed error — open menu for details');
-      if(!activeCard){$('#emptyCard').classList.remove('hidden');$('#emptyCard p').textContent=`Build v1.3.0 loaded, but the fashion source failed: ${feedHealth.lastError}. No unrelated fallback was used.`}
+      if(!activeCard){$('#emptyCard').classList.remove('hidden');$('#emptyCard p').textContent=`Build v1.4.0 loaded, but the fashion source failed: ${feedHealth.lastError}. No unrelated fallback was used.`}
     }finally{loadingPromise=null}
   })();
   return loadingPromise;
 }
-
+function statementShareForCategory(categoryId){
+  const base=Math.max(.05,Math.min(.4,Number(state.statementFrequency??15)/100));
+  if(categoryId==='statement')return Math.max(.6,base);
+  if(categoryId==='nightlife')return Math.max(.25,base);
+  if(categoryId==='summer')return Math.max(.18,base);
+  if(categoryId==='date'||categoryId==='event')return Math.max(.12,base*.9);
+  if(categoryId==='office'||categoryId==='workout')return Math.min(.08,base*.35);
+  return Math.min(.18,base*.7);
+}
 function chooseRecipes(n){const pool=[];for(const cid of state.selectedCategories){const c=CATEGORIES.find(x=>x.id===cid);for(const r of c.queries)pool.push({...r,categoryId:c.id,categoryName:c.name})}
   const explore=state.exploration/100;return weightedSampleNoReplace(pool,n,r=>{const qs=state.queryScores[r.query]||0;const novelty=(state.categoryCounts[r.categoryId]||0)<8?1.25:1;const learned=Math.max(.15,1+qs*.22);return (Math.random()<explore?1:learned)*novelty});
 }
 function weightedSampleNoReplace(items,n,weightFn){const copy=[...items],out=[];while(copy.length&&out.length<n){const weights=copy.map(weightFn),sum=weights.reduce((a,b)=>a+b,0);let r=Math.random()*sum,i=0;for(;i<copy.length;i++){r-=weights[i];if(r<=0)break}out.push(copy.splice(Math.min(i,copy.length-1),1)[0])}return out}
 
 const HF_BASE='https://datasets-server.huggingface.co';
+const EVERYDAY_DATASET='lihicarmeli/fashion-stylist-multimodal-v2';
+const EVERYDAY_PAGE='https://huggingface.co/datasets/lihicarmeli/fashion-stylist-multimodal-v2';
+const EVERYDAY_OFFSETS=[0,200,400,600,800];
 const FRONTPOSE_DATASET='zoha-ahmed07/Garment_to_Front_Pose_V1';
 const FRONTPOSE_PAGE='https://huggingface.co/datasets/zoha-ahmed07/Garment_to_Front_Pose_V1';
 const FRONTPOSE_TOTAL=165;
@@ -183,6 +212,52 @@ const STYLE_PATTERNS=[
   ['color',/colorful|bright|vibrant|green|blue|red|purple|yellow|orange/i],['pattern',/pattern|stripe|plaid|checkered|floral|graphic/i],['layering',/layered|layering|vest|jacket over/i],['statement',/statement|bold|avant[- ]garde|dramatic|fashion[- ]forward|high fashion|edgy/i]
 ];
 
+const EVERYDAY_STYLES={
+  office:['office','minimalist','elegant'],
+  casual:['casual','minimalist','streetwear'],
+  date:['elegant','minimalist','casual'],
+  nightlife:['streetwear','elegant','minimalist'],
+  brunch:['casual','minimalist','streetwear'],
+  summer:['casual','sporty','minimalist'],
+  workout:['sporty'],
+  event:['elegant','office','minimalist'],
+  travel:['casual','minimalist','streetwear','sporty'],
+  cold:['streetwear','casual','minimalist'],
+  statement:['streetwear','boho','romantic','elegant']
+};
+let _everydayPoolPromise=null;
+async function getEverydayPool(force=false){
+  if(force)_everydayPoolPromise=null;
+  if(_everydayPoolPromise)return _everydayPoolPromise;
+  _everydayPoolPromise=(async()=>{
+    const settled=await Promise.allSettled(EVERYDAY_OFFSETS.map(async offset=>{
+      const params=new URLSearchParams({dataset:EVERYDAY_DATASET,config:'default',split:'train',offset:String(offset),length:'100'});
+      const res=await fetchWithTimeout(`${HF_BASE}/rows?${params.toString()}`,15000);
+      if(!res.ok)throw new Error(`everyday source HTTP ${res.status}`);
+      const j=await res.json();return j.rows||[];
+    }));
+    const rows=[];for(const x of settled)if(x.status==='fulfilled')rows.push(...x.value);
+    const good=rows.filter(rec=>{const r=rec?.row||{};return String(r.gender).toLowerCase()==='man'&&['young adult','adult'].includes(String(r.age_group).toLowerCase())&&String(r.image_quality||'good').toLowerCase()!=='bad'&&imageSrc(r.image_improved||r.image_original)});
+    if(!good.length)throw new Error('everyday fashion source returned zero usable men\'s looks');
+    return good;
+  })();
+  return _everydayPoolPromise;
+}
+function everydayStyle(rec){return String(rec?.row?.style_preference||'casual').toLowerCase()}
+function everydayScore(rec,r){const style=everydayStyle(rec),wanted=EVERYDAY_STYLES[r.categoryId]||[];let score=wanted.includes(style)?5:0;if(style==='minimalist'||style==='casual')score+=1;if(String(rec?.row?.age_group).toLowerCase()==='young adult')score+=.5;return score+Math.random()*.35}
+function cardsForEverydayRecipe(pool,r,limit=8){
+  return [...pool].map(rec=>({rec,score:everydayScore(rec,r)})).filter(x=>x.score>=5).sort((a,b)=>b.score-a.score).slice(0,Math.max(24,limit*5)).sort(()=>Math.random()-.5).slice(0,limit).map(x=>cardFromEveryday(x.rec,r,x.score)).filter(Boolean)
+}
+function cardFromEveryday(rec,r,score=0){
+  const row=rec?.row||{},image=imageSrc(row.image_improved)||imageSrc(row.image_original);if(!image)return null;
+  const style=String(row.style_preference||'casual').toLowerCase(),age=String(row.age_group||'adult');
+  const id=rec.row_idx??row.id??image;
+  const prompt=String(row.image_prompt||'').replace(/^professional portrait photo of a man,\s*/i,'').replace(/,\s*studio lighting.*$/i,'').trim();
+  const tags=[...new Set(['everyday',style,r.categoryId,style==='minimalist'?'clean':null,style==='office'?'polished':null,style==='streetwear'?'streetwear':null,style==='sporty'?'sporty':null].filter(Boolean))];
+  const desc=`${age.replace(/\b\w/g,m=>m.toUpperCase())} men's ${style} look${prompt?` · ${prompt}`:''}.`;
+  return{photoId:'everyday:'+String(id),image,thumb:image,url:EVERYDAY_PAGE,photographer:'Everyday menswear dataset',photographerUrl:EVERYDAY_PAGE,alt:desc,imageTitle:r.title,source:'Fashion Stylist Multimodal · Hugging Face',provider:'everyday-hf',license:'MIT',licenseVersion:'',licenseUrl:EVERYDAY_PAGE,title:`${r.title} · ${style}`,query:r.query,searchTerm:r.categoryId,tags,categoryId:r.categoryId,categoryName:r.categoryName,datasetGender:'male',matchScore:score,aiGenerated:true,feedTier:'everyday',learningWeight:1};
+}
+
 let _frontPosePoolPromise=null;
 let feedHealth={status:'checking',detail:'Waiting for source test.',lastError:''};
 function setFeedHealth(status,detail=''){
@@ -193,8 +268,8 @@ function setFeedHealth(status,detail=''){
   const drawer=$('#drawerFeedStatus');if(drawer){drawer.textContent=label;drawer.dataset.status=status}
   const d=$('#drawerFeedDetail');if(d)d.textContent=detail||'Fashion-only source.';
 }
-function updateBuildDiagnostics(){const b=$('#drawerBuild');if(b)b.textContent='v1.3.0';setFeedHealth(feedHealth.status,feedHealth.detail)}
-async function probeFeed(){try{setFeedHealth('loading','Testing fashion source…');const p=await getFrontPosePool(false);setFeedHealth('online',`${p.length} male/androgynous full-body looks available`)}catch(e){feedHealth.lastError=e?.message||String(e);setFeedHealth('error',feedHealth.lastError)}}
+function updateBuildDiagnostics(){const b=$('#drawerBuild');if(b)b.textContent='v1.4.0';setFeedHealth(feedHealth.status,feedHealth.detail)}
+async function probeFeed(){try{setFeedHealth('loading','Testing everyday + statement fashion sources…');const [a,b]=await Promise.all([getEverydayPool(false),getFrontPosePool(false)]);setFeedHealth('online',`${a.length} everyday + ${b.length} statement looks available`)}catch(e){feedHealth.lastError=e?.message||String(e);setFeedHealth('error',feedHealth.lastError)}}
 function fetchWithTimeout(url,ms=12000){const ctl=new AbortController();const t=setTimeout(()=>ctl.abort(),ms);return fetch(url,{headers:{Accept:'application/json'},signal:ctl.signal}).finally(()=>clearTimeout(t))}
 async function getFrontPosePool(force=false){
   if(force)_frontPosePoolPromise=null;
@@ -229,13 +304,13 @@ function cardFromFrontPose(rec,r,score=0){
   const row=rec?.row||{};const image=imageSrc(row.front_pose_image)||imageSrc(row.product_image);if(!image)return null;
   const caption=frontPoseCaption(rec);if(!caption)return null;
   const id=rec.row_idx??caption;const tags=actualTags(caption,r.tags);
-  return{photoId:'frontpose:'+String(id),image,thumb:image,url:FRONTPOSE_PAGE,photographer:'Front Pose fashion dataset',photographerUrl:FRONTPOSE_PAGE,alt:caption,imageTitle:r.title,source:'Garment → Front Pose · Hugging Face',provider:'frontpose',license:'dataset source',licenseVersion:'',licenseUrl:FRONTPOSE_PAGE,title:r.title,query:r.query,searchTerm:r.categoryId,tags,categoryId:r.categoryId,categoryName:r.categoryName,datasetGender:/androgynous/i.test(caption)?'androgynous':'male',matchScore:score,aiGenerated:true};
+  return{photoId:'frontpose:'+String(id),image,thumb:image,url:FRONTPOSE_PAGE,photographer:'Statement menswear dataset',photographerUrl:FRONTPOSE_PAGE,alt:caption,imageTitle:r.title,source:'Garment → Front Pose · Hugging Face',provider:'frontpose',license:'dataset source',licenseVersion:'',licenseUrl:FRONTPOSE_PAGE,title:`${r.title} · statement`,query:r.query,searchTerm:r.categoryId,tags:[...new Set(['statement',...tags])],categoryId:r.categoryId,categoryName:r.categoryName,datasetGender:/androgynous/i.test(caption)?'androgynous':'male',matchScore:score,aiGenerated:true,feedTier:'statement',learningWeight:.75};
 }
 
 function showLoading(on){$('#loadingCard').classList.toggle('hidden',!on);$('#swipeCard').classList.toggle('hidden',on);$('#emptyCard').classList.add('hidden')}
-function showCard(){resetTransform();if(idx>=deck.length){activeCard=null;$('#swipeCard').classList.add('hidden');$('#emptyCard').classList.remove('hidden');return}activeCard=deck[idx];$('#swipeCard').classList.remove('hidden');$('#emptyCard').classList.add('hidden');const img=$('#outfitImage');img.onerror=()=>{img.onerror=null;idx++;showCard();if(deck.length-idx<=5)loadDeck(false)};img.src=activeCard.image;img.alt=activeCard.alt||activeCard.title;$('#cardCategory').textContent=activeCard.categoryName;$('#cardTitle').textContent=activeCard.title;$('#cardDescription').textContent=activeCard.alt||`Search recipe: ${activeCard.query}`;$('#cardSource').textContent=`${activeCard.photographer} · ${activeCard.source||'Fashion feed'}`;$('#cardSource').href=activeCard.url||FRONTPOSE_PAGE;$('#cardTags').innerHTML=activeCard.tags.map(t=>`<span>${esc(t)}</span>`).join('');$('#progressText').textContent=`${state.history.length} swipes learned · v1.3.0`;$('#categoryFilterBtn').textContent=activeCard.categoryName+' ▾';$('#categoryFilterBtn').onclick=()=>{renderCategoryPicker();showView('setup')};updateUndo()}
+function showCard(){resetTransform();if(idx>=deck.length){activeCard=null;$('#swipeCard').classList.add('hidden');$('#emptyCard').classList.remove('hidden');return}activeCard=deck[idx];$('#swipeCard').classList.remove('hidden');$('#emptyCard').classList.add('hidden');const img=$('#outfitImage');img.onerror=()=>{img.onerror=null;idx++;showCard();if(deck.length-idx<=5)loadDeck(false)};img.src=activeCard.image;img.alt=activeCard.alt||activeCard.title;$('#cardCategory').textContent=activeCard.categoryName;$('#cardTitle').textContent=activeCard.title;$('#cardDescription').textContent=activeCard.alt||`Search recipe: ${activeCard.query}`;$('#cardSource').textContent=`${activeCard.photographer} · ${activeCard.source||'Fashion feed'}`;$('#cardSource').href=activeCard.url||FRONTPOSE_PAGE;$('#cardTags').innerHTML=activeCard.tags.map(t=>`<span>${esc(t)}</span>`).join('');$('#progressText').textContent=`${state.history.length} swipes learned · v1.4.0`;$('#categoryFilterBtn').textContent=activeCard.categoryName+' ▾';$('#categoryFilterBtn').onclick=()=>{renderCategoryPicker();showView('setup')};updateUndo()}
 
-function applyLearning(h,direction){const val=(h.decision==='like'?1:-.55)*direction;for(const t of h.tags){state.tagScores[t]=(state.tagScores[t]||0)+val}state.queryScores[h.query]=(state.queryScores[h.query]||0)+val;state.categoryCounts[h.categoryId]=(state.categoryCounts[h.categoryId]||0)+direction}
+function applyLearning(h,direction){const weight=Number(h.learningWeight??(h.provider==='frontpose'?.35:1));const val=(h.decision==='like'?1:-.55)*direction*weight;for(const t of h.tags){state.tagScores[t]=(state.tagScores[t]||0)+val}state.queryScores[h.query]=(state.queryScores[h.query]||0)+val;state.categoryCounts[h.categoryId]=(state.categoryCounts[h.categoryId]||0)+direction}
 function undo(){const h=state.history.pop();if(!h)return;applyLearning(h,-1);saveState();if(idx>0)idx--;if(deck[idx]?.photoId!==h.photoId){deck.splice(idx,0,{...h})}showCard();toast('Last swipe undone')}
 function updateUndo(){$('#undoBtn').disabled=!state.history.length}
 
@@ -251,7 +326,7 @@ function renderProfile(){const H=state.history,likes=H.filter(x=>x.decision==='l
  const cats=CATEGORIES.filter(c=>state.selectedCategories.includes(c.id)).map(c=>{const a=H.filter(x=>x.categoryId===c.id),l=a.filter(x=>x.decision==='like').length;return{n:c.name,total:a.length,rate:a.length?Math.round(l/a.length*100):0}}).sort((a,b)=>b.total-a.total);$('#categoryStats').innerHTML=cats.map(c=>`<div class="category-stat"><span>${esc(c.n)}</span><span>${c.total?`${c.rate}% liked · ${c.total} seen`:'not trained yet'}</span></div>`).join('');$('#likedGrid').innerHTML=likes.slice(-18).reverse().map(x=>`<a href="${x.url}" target="_blank" rel="noopener" title="${escAttr(x.title)}"><img src="${x.thumb||x.image}" alt="${escAttr(x.alt||x.title)}"></a>`).join('')||'<p class="muted">Your liked looks will collect here.</p>'}
 function metric(v,l){return`<div class="metric"><strong>${v}</strong><span>${l}</span></div>`}
 
-function exportData(){return{app:'Style DNA',version:APP_VERSION,exportedAt:new Date().toISOString(),settings:{selectedCategories:state.selectedCategories,exploration:state.exploration},summary:computeSummary(),swipes:state.history}}
+function exportData(){return{app:'Style DNA',version:APP_VERSION,exportedAt:new Date().toISOString(),settings:{selectedCategories:state.selectedCategories,exploration:state.exploration,statementFrequency:state.statementFrequency},summary:computeSummary(),swipes:state.history}}
 function computeSummary(){const H=state.history,likes=H.filter(x=>x.decision==='like'),dislikes=H.filter(x=>x.decision==='nope');const ranked=Object.entries(state.tagScores).sort((a,b)=>b[1]-a[1]);return{totalSwipes:H.length,likes:likes.length,dislikes:dislikes.length,likeRate:H.length?likes.length/H.length:0,topPositiveTags:ranked.filter(x=>x[1]>0).slice(0,12),topNegativeTags:[...ranked].reverse().filter(x=>x[1]<0).slice(0,12)}}
 function buildChatGPTBrief(){const e=exportData(),s=e.summary;const lines=[];lines.push('# STYLE DNA — ANALYSIS PACKET');lines.push(`Exported: ${e.exportedAt}`);lines.push(`Total swipes: ${s.totalSwipes} | Likes: ${s.likes} | Dislikes: ${s.dislikes} | Like rate: ${Math.round(s.likeRate*100)}%`);lines.push('');lines.push('## Task for ChatGPT');lines.push('Analyze this preference dataset to infer my fashion taste without overfitting to any single photo or search query. Separate strong evidence from tentative hypotheses. Identify preferences in silhouette, proportions, fit, color, texture, formality, styling, shoes, accessories, skin exposure, statement level, and masculine/feminine/androgynous expression. Compare patterns across life contexts. Then propose the next 20-30 outfits I should evaluate to resolve the biggest uncertainties. Ultimately use this profile to design a versatile wardrobe from shoes through accessories, including item priorities and mix-and-match logic.');lines.push('');lines.push('## Aggregate signals');lines.push('Positive: '+(s.topPositiveTags.map(x=>`${x[0]} (${x[1].toFixed(1)})`).join(', ')||'not enough data'));lines.push('Negative: '+(s.topNegativeTags.map(x=>`${x[0]} (${x[1].toFixed(1)})`).join(', ')||'not enough data'));lines.push('');lines.push('## Swipe-level evidence');for(const h of e.swipes){lines.push(`- ${h.decision.toUpperCase()} | ${h.categoryName} | ${h.title} | tags: ${h.tags.join(', ')} | photo description: ${h.alt||'n/a'} | source: ${h.url}${h.detailTags?.length?` | user detail: ${h.detailTags.join(', ')}`:''}${h.note?` | note: ${h.note}`:''}`)}return lines.join('\n')}
 function buildShoppingBrief(){const s=computeSummary();const pos=s.topPositiveTags.map(x=>x[0]).slice(0,8),neg=s.topNegativeTags.map(x=>x[0]).slice(0,6);const likes=state.history.filter(x=>x.decision==='like').slice(-8).reverse();return [`STYLE SHOPPING BRIEF`,`Based on ${s.totalSwipes} outfit reactions.`,``,`Look for: ${pos.join(', ')||'still learning'}.`,`Avoid / be cautious with: ${neg.join(', ')||'still learning'}.`,``,`Reference looks:`,...likes.map((x,i)=>`${i+1}. ${x.title} — ${x.url}`),``,`Use these as direction, not a uniform: prioritize pieces that can recombine across office, casual, social, date, travel, and going-out outfits.`].join('\n')}
@@ -265,6 +340,6 @@ function esc(s){return String(s??'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;
 function escAttr(s){return esc(s).replace(/"/g,'&quot;')}
 
 // Preserve optional detail on the exact card when the swipe is recorded.
-function decide(decision){if(!activeCard)return;const pending=activeCard.pendingDetail;animateDecision(decision,()=>{const h={...activeCard,decision,detailTags:pending?.tags||[],note:pending?.note||'',timestamp:new Date().toISOString()};delete h.pendingDetail;state.history.push(h);applyLearning(h,1);if(h.detailTags?.length){for(const t of h.detailTags){const k=`detail:${t}`;state.tagScores[k]=(state.tagScores[k]||0)+(decision==='like'?1.15:-.65)}}saveState();idx++;showCard();if(deck.length-idx<=5)loadDeck(false)})}
+function decide(decision){if(!activeCard)return;const pending=activeCard.pendingDetail;animateDecision(decision,()=>{const h={...activeCard,decision,detailTags:pending?.tags||[],note:pending?.note||'',timestamp:new Date().toISOString(),appVersionAtSwipe:APP_VERSION};delete h.pendingDetail;state.history.push(h);applyLearning(h,1);if(h.detailTags?.length){for(const t of h.detailTags){const k=`detail:${t}`;state.tagScores[k]=(state.tagScores[k]||0)+(decision==='like'?1.15:-.65)}}saveState();idx++;showCard();if(deck.length-idx<=5)loadDeck(false)})}
 
 init();

@@ -6,9 +6,9 @@
   <meta name="theme-color" content="#101014" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <title>Style DNA v1.3.0</title>
-  <link rel="manifest" href="manifest.webmanifest?v=1.3.0" />
-  <link rel="stylesheet" href="styles.css?v=1.3.0" />
+  <title>Style DNA v1.4.0</title>
+  <link rel="manifest" href="manifest.webmanifest?v=1.4.0" />
+  <link rel="stylesheet" href="styles.css?v=1.4.0" />
 </head>
 <body>
   <div id="app" class="app-shell">
@@ -16,7 +16,7 @@
       <button class="icon-btn" id="menuBtn" aria-label="Open menu">☰</button>
       <div class="brand">
         <span class="brand-mark">S</span>
-        <div><strong>Style DNA</strong><small id="headerMode">Discover · v1.3.0</small></div>
+        <div><strong>Style DNA</strong><small id="headerMode">Discover · v1.4.0</small></div>
       </div>
       <button class="icon-btn" id="statsBtn" aria-label="Open style profile">◉</button>
     </header>
@@ -30,9 +30,9 @@
         </div>
 
         <div class="panel">
-          <h2>1. Fashion-only feed <span id="setupFeedStatus" class="status-inline">checking…</span></h2>
-          <p class="muted"><strong>Build v1.3.0.</strong> This build uses a compact male/androgynous full-body fashion dataset with detailed outfit captions. It does not use Openverse, Wikimedia, or generic image search. If the source fails, Style DNA shows the exact error instead of silently substituting unrelated images.</p>
-          <a class="text-link" href="https://huggingface.co/datasets/zoha-ahmed07/Garment_to_Front_Pose_V1" target="_blank" rel="noopener">View the current fashion source ↗</a>
+          <h2>1. Mostly-wearable fashion feed <span id="setupFeedStatus" class="status-inline">checking…</span></h2>
+          <p class="muted"><strong>Build v1.4.0.</strong> The default feed is now intentionally dominated by normal, wearable menswear: casual, minimalist, office, sporty, streetwear, and polished looks. A smaller statement pool is mixed in so you can still discover interesting ideas without feeling like every card is a runway challenge.</p>
+          <div class="source-links"><a class="text-link" href="https://huggingface.co/datasets/lihicarmeli/fashion-stylist-multimodal-v2" target="_blank" rel="noopener">Everyday source ↗</a><a class="text-link" href="https://huggingface.co/datasets/zoha-ahmed07/Garment_to_Front_Pose_V1" target="_blank" rel="noopener">Statement source ↗</a></div>
         </div>
 
         <div class="panel">
@@ -42,9 +42,16 @@
         </div>
 
         <div class="panel">
-          <h2>3. Choose your exploration mix</h2>
-          <div class="range-row"><span>Familiar</span><input id="explorationRange" type="range" min="15" max="60" value="35" /><span>Experimental</span></div>
-          <p class="muted">This controls how often Style DNA deliberately shows you looks outside your current favorites so it can discover surprises instead of creating a fashion echo chamber.</p>
+          <h2>3. Set the wearable / statement mix</h2>
+          <div class="range-row"><span id="statementEverydayPct">85% everyday</span><input id="statementRange" type="range" min="5" max="40" value="15" /><span id="statementEdgePct">15% statement</span></div>
+          <p class="mix-callout" id="statementMixLabel">85% everyday · 15% statement</p>
+          <p class="muted">“Everyday” means outfits that should feel plausible for work, errands, brunch, dates, travel, the gym, etc. “Statement” means more fashion-forward, queer, unusual, or editorial ideas. The dedicated Queer / statement category will still push farther even at the default mix.</p>
+        </div>
+
+        <div class="panel">
+          <h2>4. Choose the learning exploration level</h2>
+          <div class="range-row"><span>Follow my likes</span><input id="explorationRange" type="range" min="15" max="60" value="35" /><span>Test alternatives</span></div>
+          <p class="muted">This is separate from “weirdness.” It controls whether Style DNA keeps testing different silhouettes and aesthetics versus leaning harder into patterns you already like.</p>
         </div>
 
         <button id="startBtn" class="primary-btn big">Start swiping</button>
@@ -131,9 +138,9 @@
       <button class="drawer-item" id="changeCategoriesBtn">Edit life contexts</button>
       <button class="drawer-item" id="clearDataBtn">Reset swipe history</button>
       <div class="drawer-diagnostics">
-        <div><span>Build</span><strong id="drawerBuild">v1.3.0</strong></div>
+        <div><span>Build</span><strong id="drawerBuild">v1.4.0</strong></div>
         <div><span>Fashion feed</span><strong id="drawerFeedStatus">checking…</strong></div>
-        <small id="drawerFeedDetail">Waiting for source test.</small>
+        <small id="drawerFeedDetail">Waiting for everyday + statement source test.</small>
       </div>
       <button class="drawer-item" id="forceUpdateBtn">Force app update / clear cache</button>
       <div class="drawer-foot">Private by default: your swipe preferences live in your browser's local storage. Force update clears app caches, not swipe history.</div>
@@ -141,6 +148,6 @@
   </div>
 
   <div id="toast" class="toast hidden"></div>
-  <script src="app.js?v=1.3.0"></script>
+  <script src="app.js?v=1.4.0"></script>
 </body>
 </html>

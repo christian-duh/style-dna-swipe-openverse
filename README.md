@@ -1,13 +1,20 @@
-# Style DNA v1.3.0 — recovery build
+# Style DNA v1.4.0 — Wearable Mix
 
-This build fixes two separate problems found in v1.2:
+This build fixes the feed balance problem in v1.3.
 
-1. **Visible versioning / cache diagnostics.** The header always says `v1.3.0`; the menu shows the exact build and feed status; and **Force app update / clear cache** unregisters old service workers and deletes app caches without deleting local swipe history. Static assets also use cache-busting query strings.
-2. **Broken fashion source.** v1.2 attempted to use the default Qwen DeepFashion Dataset Viewer search endpoint, which is not reliable for that large split, and its `rank0` / `rank1` preview fallback contains only women. v1.3 instead uses `zoha-ahmed07/Garment_to_Front_Pose_V1`, a compact 165-row male/androgynous full-body fashion dataset with detailed captions.
+## What changed
 
-## Deploy
-Upload every file in this folder to the root of the existing GitHub Pages repository, replacing the old copies. After Pages finishes deploying, open the site in Safari with `?build=1.3.0` appended once.
+- **Default feed = mostly normal clothes.** The app now blends two separate fashion sources instead of treating an experimental menswear dataset as the whole universe.
+- **85% everyday / 15% statement by default.** You can change that from 95/5 up to 60/40.
+- **Everyday pool:** adult / young-adult men's casual, minimalist, office, sporty, streetwear, and elegant looks from `lihicarmeli/fashion-stylist-multimodal-v2`.
+- **Statement pool:** the more editorial `zoha-ahmed07/Garment_to_Front_Pose_V1` source is now deliberately a minority source, except in the explicit Queer / statement context.
+- **Learning exploration is separate from weirdness.** The exploration slider now means “keep testing alternatives,” not “show stranger clothes.”
+- **Old v1.3 experimental swipes are preserved but automatically downweighted** when the preference scores are rebuilt, so an oversupply of runway-ish looks does not dominate your profile.
+- **Visible version:** the header and drawer both say `v1.4.0`.
+- No Openverse/Wikimedia/generic fallback.
 
-You are definitely on the new build only if the header reads **Discover · v1.3.0**.
+## Updating GitHub Pages
 
-The app no longer registers an offline service worker while the project is still changing rapidly. That is intentional; avoiding stale PWA code is more important than offline use during development.
+Replace the files in your existing Style DNA repository with all files from this folder and commit. Then open the Pages URL in Safari with `?build=1.4.0` appended once. The top of the app should say `Discover · v1.4.0`.
+
+The Force App Update button clears browser/service-worker caches but does **not** erase swipe history.

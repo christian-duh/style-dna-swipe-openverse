@@ -40,3 +40,5 @@ button{cursor:pointer;color:inherit}
 .drawer-diagnostics{margin:1rem 0;padding:.8rem .9rem;border:1px solid rgba(255,255,255,.09);border-radius:14px;background:rgba(255,255,255,.025)}
 .drawer-diagnostics>div{display:flex;justify-content:space-between;gap:1rem;margin:.15rem 0;font-size:.82rem}.drawer-diagnostics span,.drawer-diagnostics small{color:var(--muted)}
 .drawer-diagnostics small{display:block;margin-top:.55rem;line-height:1.35;word-break:break-word}
+.source-links{display:flex;flex-wrap:wrap;gap:14px;margin-top:10px}
+.mix-callout{margin:12px 0 6px;font-weight:800;color:#f1eefb;text-align:center;font-size:14px}
