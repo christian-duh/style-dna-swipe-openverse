@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#101014" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>Style DNA</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="app" class="app-shell">
+    <header class="topbar">
+      <button class="icon-btn" id="menuBtn" aria-label="Open menu">☰</button>
+      <div class="brand">
+        <span class="brand-mark">S</span>
+        <div><strong>Style DNA</strong><small id="headerMode">Discover</small></div>
+      </div>
+      <button class="icon-btn" id="statsBtn" aria-label="Open style profile">◉</button>
+    </header>
+
+    <main>
+      <section id="setupView" class="view setup-view hidden">
+        <div class="hero-card">
+          <span class="eyebrow">YOUR PERSONAL STYLE LAB</span>
+          <h1>Train your taste, one instinctive swipe at a time.</h1>
+          <p>Swipe outfits you like or dislike. Style DNA learns the patterns, keeps the actual photo references, and exports a structured profile you can hand to ChatGPT—or to someone shopping for you.</p>
+        </div>
+
+        <div class="panel">
+          <h2>1. Photo source: ready</h2>
+          <p class="muted">Style DNA now uses Openverse, a search engine for openly licensed media. No account, API key, or secret is required. Each result keeps its creator, source, and license metadata so your swipe history stays traceable.</p>
+          <a class="text-link" href="https://openverse.org/" target="_blank" rel="noopener">About Openverse ↗</a>
+        </div>
+
+        <div class="panel">
+          <h2>2. Pick the parts of your life to train</h2>
+          <p class="muted">Start broad. You can narrow later once the app has enough signal.</p>
+          <div id="categoryPicker" class="chip-grid"></div>
+        </div>
+
+        <div class="panel">
+          <h2>3. Choose your exploration mix</h2>
+          <div class="range-row"><span>Familiar</span><input id="explorationRange" type="range" min="15" max="60" value="35" /><span>Experimental</span></div>
+          <p class="muted">This controls how often Style DNA deliberately shows you looks outside your current favorites so it can discover surprises instead of creating a fashion echo chamber.</p>
+        </div>
+
+        <button id="startBtn" class="primary-btn big">Start swiping</button>
+      </section>
+
+      <section id="swipeView" class="view swipe-view hidden">
+        <div class="session-strip">
+          <button id="categoryFilterBtn" class="pill"></button>
+          <span id="progressText" class="muted small"></span>
+        </div>
+
+        <div class="card-stage" id="cardStage">
+          <article id="swipeCard" class="swipe-card">
+            <div class="decision-stamp nope">NOPE</div>
+            <div class="decision-stamp like">LIKE</div>
+            <img id="outfitImage" alt="Fashion outfit" draggable="false" />
+            <div class="image-fade"></div>
+            <div class="card-copy">
+              <div class="card-label-row"><span id="cardCategory" class="mini-pill"></span><a id="cardSource" class="photo-credit" href="https://openverse.org/" target="_blank" rel="noopener"></a></div>
+              <h2 id="cardTitle"></h2>
+              <p id="cardDescription"></p>
+              <div id="cardTags" class="tag-row"></div>
+            </div>
+          </article>
+
+          <div id="loadingCard" class="loading-card hidden">
+            <div class="loader"></div><p>Building your next style batch…</p>
+          </div>
+
+          <div id="emptyCard" class="empty-card hidden">
+            <h2>Deck complete</h2>
+            <p>You’ve reached the end of this batch. Load another one or inspect what your swipes are teaching us.</p>
+            <button id="moreBtn" class="primary-btn">Load more looks</button>
+          </div>
+        </div>
+
+        <div class="action-row">
+          <button id="undoBtn" class="round-action undo" aria-label="Undo">↶</button>
+          <button id="nopeBtn" class="round-action nope" aria-label="Dislike">✕</button>
+          <button id="detailBtn" class="round-action detail" aria-label="Add detail">＋</button>
+          <button id="likeBtn" class="round-action like" aria-label="Like">♥</button>
+        </div>
+        <p class="gesture-hint">Swipe left = no · right = like · tap + when you want to say why</p>
+      </section>
+
+      <section id="profileView" class="view profile-view hidden">
+        <div class="section-heading">
+          <div><span class="eyebrow">LIVE PROFILE</span><h1>Your Style DNA</h1></div>
+          <button id="backToSwipeBtn" class="secondary-btn">Back</button>
+        </div>
+        <div id="profileSummary" class="metric-grid"></div>
+        <div class="panel"><h2>Signals emerging</h2><div id="signalBars"></div></div>
+        <div class="panel"><h2>By life context</h2><div id="categoryStats"></div></div>
+        <div class="panel"><h2>Liked looks</h2><div id="likedGrid" class="liked-grid"></div></div>
+        <div class="panel export-panel">
+          <h2>Take your taste with you</h2>
+          <p class="muted">The ChatGPT brief is the most useful output: it turns all of your swipes, descriptors, tags, and optional notes into one copyable analysis packet.</p>
+          <div class="export-actions">
+            <button id="copyBriefBtn" class="primary-btn">Copy ChatGPT brief</button>
+            <button id="downloadJsonBtn" class="secondary-btn">Download JSON</button>
+            <button id="downloadCsvBtn" class="secondary-btn">Download CSV</button>
+            <button id="gaboBriefBtn" class="secondary-btn">Copy shopping brief</button>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <div id="detailSheet" class="sheet hidden" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head"><div><span class="eyebrow">OPTIONAL DETAIL</span><h2>What stands out?</h2></div><button id="closeSheetBtn" class="icon-btn">✕</button></div>
+      <p class="muted">Tap anything that meaningfully affected your reaction. Skip this for ordinary swipes.</p>
+      <div id="detailChips" class="detail-chip-grid"></div>
+      <label class="field-label" for="detailNote">Anything else?</label>
+      <textarea id="detailNote" rows="3" placeholder="e.g., love the pants but hate the shoes"></textarea>
+      <button id="saveDetailBtn" class="primary-btn big">Save detail</button>
+    </div>
+    <div id="sheetBackdrop" class="backdrop hidden"></div>
+
+    <aside id="drawer" class="drawer hidden">
+      <div class="drawer-head"><div class="brand"><span class="brand-mark">S</span><strong>Style DNA</strong></div><button id="closeDrawerBtn" class="icon-btn">✕</button></div>
+      <button class="drawer-item" data-nav="swipe">Discover</button>
+      <button class="drawer-item" data-nav="profile">Style profile</button>
+      <button class="drawer-item" id="changeCategoriesBtn">Edit life contexts</button>
+      <button class="drawer-item" id="clearDataBtn">Reset swipe history</button>
+      <div class="drawer-foot">Private by default: preferences and API key live in your browser's local storage.</div>
+    </aside>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+  <script src="app.js"></script>
+</body>
+</html>
